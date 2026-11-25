@@ -9,6 +9,7 @@ import {
   type Drawable,
   type WatermarkOptions,
 } from "./watermark";
+import { t } from "./i18n";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -17,7 +18,8 @@ const JPEG_QUALITY = 0.9;
 
 export const ACCEPTED_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "heic", "heif"];
 
-export type ProgressFn = (message: string) => void;
+/** Messages are thunks so the UI can re-translate them on language change. */
+export type ProgressFn = (message: () => string) => void;
 export type PasswordFn = (fileName: string, retry: boolean) => Promise<string | null>;
 
 function extension(file: File): string {
@@ -67,14 +69,15 @@ async function pdfToCanvases(
     pdf = await task.promise;
   } catch (e) {
     if ((e as Error)?.name === "PasswordException" || task.destroyed) {
-      throw new Error(`« ${file.name} » est protégé par un mot de passe.`);
+      throw new Error(t("error.password", { name: file.name }));
     }
     throw e;
   }
   const pages: HTMLCanvasElement[] = [];
   try {
     for (let i = 1; i <= pdf.numPages; i++) {
-      onProgress(`Lecture de « ${file.name} » — page ${i}/${pdf.numPages}`);
+      const n = pdf.numPages;
+      onProgress(() => t("progress.readPage", { name: file.name, i, n }));
       const page = await pdf.getPage(i);
       const base = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: pdfRenderScale(base.width, base.height) * 2 });
@@ -134,7 +137,7 @@ async function fileToDrawables(
   askPassword: PasswordFn,
 ): Promise<Drawable[]> {
   if (isPdf(file)) return pdfToCanvases(file, onProgress, askPassword);
-  onProgress(`Lecture de « ${file.name} »`);
+  onProgress(() => t("progress.read", { name: file.name }));
   if (isHeic(file)) return [await heicToDrawable(file)];
   return [await imageToDrawable(file)];
 }
@@ -142,7 +145,7 @@ async function fileToDrawables(
 function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Échec de l'encodage JPEG."))),
+      (b) => (b ? resolve(b) : reject(new Error(t("error.jpeg")))),
       "image/jpeg",
       JPEG_QUALITY,
     ),
@@ -177,7 +180,8 @@ export async function watermarkFiles(
     const drawables = await fileToDrawables(file, onProgress, askPassword);
     for (const d of drawables) {
       pageIndex++;
-      onProgress(`Application du filigrane — page ${pageIndex}`);
+      const n = pageIndex;
+      onProgress(() => t("progress.watermark", { n }));
       // Let the UI repaint between heavy canvas operations.
       await new Promise((r) => setTimeout(r, 0));
       const page = fitImageToPage(d);
@@ -198,9 +202,9 @@ export async function watermarkFiles(
     }
   }
 
-  if (pageIndex === 0) throw new Error("Aucune page n'a pu être lue dans les fichiers fournis.");
+  if (pageIndex === 0) throw new Error(t("error.noPages"));
 
-  onProgress("Génération du PDF");
+  onProgress(() => t("progress.pdf"));
   const bytes = await out.save();
   return {
     pdf: new Blob([bytes as BlobPart], { type: "application/pdf" }),

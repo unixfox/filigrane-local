@@ -77,13 +77,10 @@ a {
   font-size: 1.35rem;
 }
 
-.brand-mark {
+.brand-logo {
+  display: block;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  background:
-    linear-gradient(-34deg, transparent 38%, rgb(255 255 255 / 0.85) 38% 48%, transparent 48% 60%, rgb(255 255 255 / 0.45) 60% 70%, transparent 70%),
-    var(--accent);
 }
 
 .badge {
@@ -372,4 +369,59 @@ input[type="text"]::placeholder {
 
 .site-footer p {
   margin: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lang-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.lang-switch button + button {
+  border-left: 1px solid var(--border);
+}
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.lang-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+@media (max-width: 480px) {
+  .badge {
+    display: none;
+  }
+}
+
+.footer-links {
+  margin-top: 12px !important;
+}
+
+.footer-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
 }

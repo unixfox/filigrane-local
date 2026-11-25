@@ -5,6 +5,8 @@
  * Every step runs in the browser on <canvas>; nothing is uploaded.
  */
 
+import { t } from "./i18n";
+
 /** A4 at 150 dpi — maximum page width in pixels (PageDimension.A4150). */
 export const MAX_PAGE_WIDTH = 1240;
 /** A4 media box in PDF points. */
@@ -50,7 +52,7 @@ function createCanvas(width: number, height: number): HTMLCanvasElement {
 
 function ctx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
   const ctx = c.getContext("2d", { willReadFrequently: false });
-  if (!ctx) throw new Error("Canvas 2D non disponible dans ce navigateur.");
+  if (!ctx) throw new Error(t("error.canvas"));
   return ctx;
 }
 

@@ -1,5 +1,6 @@
 import "./style.css";
-import { isSupported, watermarkFiles } from "./document";
+import { isSupported, watermarkFiles, type WatermarkResult } from "./document";
+import { applyTranslations, onLangChange, setLang, t, type Lang } from "./i18n";
 import type { WatermarkOptions } from "./watermark";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -11,7 +12,7 @@ const fileList = $<HTMLUListElement>("file-list");
 const filesError = $<HTMLParagraphElement>("files-error");
 const textInput = $<HTMLInputElement>("text");
 const textError = $<HTMLParagraphElement>("text-error");
-const count = $<HTMLSpanElement>("count");
+const counter = $<HTMLParagraphElement>("counter");
 const submit = $<HTMLButtonElement>("submit");
 const status = $<HTMLParagraphElement>("status");
 const result = $<HTMLElement>("result");
@@ -21,13 +22,21 @@ const previews = $<HTMLDivElement>("previews");
 
 let files: File[] = [];
 let objectUrls: string[] = [];
+let lastResult: { res: WatermarkResult; base: string | null; seconds: string } | null = null;
+
+// Error messages are stored as functions so they re-translate on language change.
+let filesErrorMsg: (() => string) | null = null;
+let textErrorMsg: (() => string) | null = null;
+let statusMsg: (() => string) | null = null;
 
 const formatSize = (n: number) =>
-  n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} Ko` : `${(n / 1024 / 1024).toFixed(1)} Mo`;
+  n < 1024 * 1024
+    ? t("size.kb", { n: Math.max(1, Math.round(n / 1024)) })
+    : t("size.mb", { n: (n / 1024 / 1024).toFixed(1) });
 
-function showError(el: HTMLElement, message: string | null) {
-  el.textContent = message ?? "";
-  el.hidden = !message;
+function setMessage(el: HTMLElement, msg: (() => string) | null) {
+  el.textContent = msg ? msg() : "";
+  if (el !== status) el.hidden = !msg;
 }
 
 function renderFileList() {
@@ -43,8 +52,8 @@ function renderFileList() {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "remove";
-      remove.textContent = "Retirer";
-      remove.setAttribute("aria-label", `Retirer ${file.name}`);
+      remove.textContent = t("files.remove");
+      remove.setAttribute("aria-label", t("files.removeLabel", { name: file.name }));
       remove.addEventListener("click", () => {
         files.splice(i, 1);
         renderFileList();
@@ -55,16 +64,35 @@ function renderFileList() {
   );
 }
 
+function renderCounter() {
+  counter.textContent = t("text.counter", { count: textInput.value.length });
+}
+
+function renderResult() {
+  if (!lastResult) return;
+  const { res, base, seconds } = lastResult;
+  const pages = t(res.pageCount > 1 ? "result.pages.other" : "result.pages.one", { n: res.pageCount });
+  resultInfo.textContent = t("result.info", { pages, size: formatSize(res.pdf.size), seconds });
+  download.download = t("result.filename", { base: base ?? t("result.defaultBase") });
+  previews.querySelectorAll("img").forEach((img, i) => (img.alt = t("result.preview", { n: i + 1 })));
+}
+
+function renderDynamic() {
+  renderFileList();
+  renderCounter();
+  renderResult();
+  setMessage(filesError, filesErrorMsg);
+  setMessage(textError, textErrorMsg);
+  setMessage(status, statusMsg);
+}
+
 function addFiles(list: FileList | File[]) {
   const incoming = Array.from(list);
   const rejected = incoming.filter((f) => !isSupported(f));
   files.push(...incoming.filter(isSupported));
-  showError(
-    filesError,
-    rejected.length
-      ? `Format non supporté : ${rejected.map((f) => f.name).join(", ")}`
-      : null,
-  );
+  const names = rejected.map((f) => f.name).join(", ");
+  filesErrorMsg = rejected.length ? () => t("files.unsupported", { names }) : null;
+  setMessage(filesError, filesErrorMsg);
   renderFileList();
 }
 
@@ -88,27 +116,31 @@ dropzone.addEventListener("drop", (e) => {
 });
 
 textInput.addEventListener("input", () => {
-  count.textContent = String(textInput.value.length);
-  if (textInput.value.trim()) showError(textError, null);
+  renderCounter();
+  if (textInput.value.trim()) {
+    textErrorMsg = null;
+    setMessage(textError, null);
+  }
 });
 
 const askPassword = async (fileName: string, retry: boolean) =>
-  window.prompt(
-    (retry ? "Mot de passe incorrect.\n" : "") + `« ${fileName} » est protégé. Mot de passe :`,
-  );
+  window.prompt((retry ? t("password.wrong") + "\n" : "") + t("password.prompt", { name: fileName }));
 
 function resetResult() {
   objectUrls.forEach((u) => URL.revokeObjectURL(u));
   objectUrls = [];
   previews.replaceChildren();
+  lastResult = null;
   result.hidden = true;
 }
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = textInput.value.trim();
-  showError(filesError, files.length ? null : "Veuillez sélectionner au moins un fichier.");
-  showError(textError, text ? null : "Veuillez indiquer le texte du filigrane.");
+  filesErrorMsg = files.length ? null : () => t("files.required");
+  textErrorMsg = text ? null : () => t("text.required");
+  setMessage(filesError, filesErrorMsg);
+  setMessage(textError, textErrorMsg);
   if (!files.length || !text) return;
 
   const options: WatermarkOptions = {
@@ -124,32 +156,49 @@ form.addEventListener("submit", async (e) => {
   const started = performance.now();
 
   try {
-    const res = await watermarkFiles(files, text, options, (m) => (status.textContent = m), askPassword);
+    const res = await watermarkFiles(
+      files,
+      text,
+      options,
+      (msg) => setMessage(status, (statusMsg = msg)),
+      askPassword,
+    );
     const pdfUrl = URL.createObjectURL(res.pdf);
     objectUrls.push(pdfUrl, ...res.previews);
 
-    const base = files.length === 1 ? files[0].name.replace(/\.[^.]+$/, "") : "documents";
     download.href = pdfUrl;
-    download.download = `${base}-filigrane.pdf`;
-    resultInfo.textContent = `${res.pageCount} page${res.pageCount > 1 ? "s" : ""} · ${formatSize(res.pdf.size)} · généré en ${((performance.now() - started) / 1000).toFixed(1)} s sur votre appareil`;
     previews.replaceChildren(
-      ...res.previews.map((src, i) => {
+      ...res.previews.map((src) => {
         const img = document.createElement("img");
         img.src = src;
-        img.alt = `Aperçu de la page ${i + 1}`;
         img.loading = "lazy";
         return img;
       }),
     );
+    lastResult = {
+      res,
+      base: files.length === 1 ? files[0].name.replace(/\.[^.]+$/, "") : null,
+      seconds: ((performance.now() - started) / 1000).toFixed(1),
+    };
+    renderResult();
     result.hidden = false;
-    status.textContent = "";
+    setMessage(status, (statusMsg = null));
     result.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (err) {
     console.error(err);
     status.classList.add("error");
-    status.textContent = `Erreur : ${(err as Error)?.message ?? err}`;
+    const message = (err as Error)?.message ?? String(err);
+    setMessage(status, (statusMsg = () => t("error.prefix", { message })));
   } finally {
     submit.disabled = false;
     form.removeAttribute("aria-busy");
   }
 });
+
+document.querySelectorAll<HTMLButtonElement>("[data-lang]").forEach((btn) =>
+  btn.addEventListener("click", () => setLang(btn.dataset.lang as Lang)),
+);
+onLangChange(renderDynamic);
+
+applyTranslations();
+renderDynamic();

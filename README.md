@@ -41,3 +41,9 @@ Le site est déployé automatiquement sur GitHub Pages à chaque push sur `main`
 ## Avertissement
 
 Projet indépendant, non affilié à l'État ni à DossierFacile.
+
+L'interface est disponible en français et en anglais (détection automatique de la langue du navigateur, bouton FR / EN, ou `?lang=en`). L'image d'aperçu des liens (`public/og-image.png`) est générée depuis `assets/og-image.svg` :
+
+```bash
+rsvg-convert -w 1200 -h 630 assets/og-image.svg -o public/og-image.png
+```
