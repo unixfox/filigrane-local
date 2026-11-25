@@ -1,0 +1,25 @@
+{
+  "name": "filigrane-local",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "assets": "node scripts/copy-pdfjs-assets.mjs",
+    "predev": "pnpm run assets",
+    "prebuild": "pnpm run assets",
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "heic2any": "^0.0.4",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.5.438"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "packageManager": "pnpm@12.14.0"
+}
